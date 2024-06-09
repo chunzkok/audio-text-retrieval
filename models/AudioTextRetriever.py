@@ -37,7 +37,7 @@ class AudioTextRetriever(nn.Module):
     DEFAULT_TEXT_ENCODER = lambda: RoBERTaEncoder(2048, 1024)
 
     def __init__(self, 
-                 loss_fn: Callable[[torch.FloatTensor, torch.FloatTensor], torch.FloatTensor],
+                 loss_fn: Callable[[torch.FloatTensor, torch.FloatTensor, torch.Tensor], torch.FloatTensor],
                  text_enc: Optional[TextEncoder] = None, 
                  audio_enc: Optional[AudioEncoder] = None,
                  num_heads: Optional[int] = 8,
@@ -78,7 +78,7 @@ class AudioTextRetriever(nn.Module):
                 sentence: Union[str, List[str], List[List[str]]], 
                 sampling_rate: Optional[int] = 16000,
                 return_dict: Optional[bool] = True,
-                labels: Any = None
+                labels: Optional[Union[np.ndarray, List[bool]]]= None
                 ) -> torch.FloatTensor:
         audio_embed = self.AudioEncoder.preprocess(raw_audio, sampling_rate)
         print(f"audio preprocess dims: {audio_embed.input_values.shape}")
@@ -100,7 +100,7 @@ class AudioTextRetriever(nn.Module):
         text_embed = layer_norm(self.TextAttentionFF(text_embed) + text_embed)
 
         embeddings = torch.stack((audio_embed, text_embed))
-        loss = self.loss_fn(audio_embed, text_embed)
+        loss = self.loss_fn(audio_embed, text_embed, labels) if labels is not None else None
 
         return (AudioTextOutput(embeddings=embeddings, loss=loss) if return_dict 
                 else (loss, embeddings)) # Trainer specifies to return loss as first element if a tuple is returned
