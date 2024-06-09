@@ -35,11 +35,13 @@ class AudioTextRetriever(nn.Module):
             embed_dim = self.embedding_dim,
             num_heads = num_heads,
             dropout = dropout)
+        self.AudioAttentionFF = nn.Linear(self.embedding_dim, self.embedding_dim)
 
         self.TextAttention = nn.MultiheadAttention(
             embed_dim = self.embedding_dim,
             num_heads = num_heads,
             dropout = dropout)
+        self.TextAttentionFF = nn.Linear(self.embedding_dim, self.embedding_dim)
 
     # Returns a tensor of size (2, embedding_dim).
     # First number represents audio embedding.
@@ -59,11 +61,14 @@ class AudioTextRetriever(nn.Module):
         text_embed = self.TextEncoder(text_embed)
         print(f"text embed dims: {text_embed.shape}")
 
-        audio_embed, text_embed = (
-            self.AudioAttention(audio_embed, text_embed, text_embed)[0],
-            self.TextAttention(text_embed, audio_embed, audio_embed)[0]
-        )
+        audio_embed_raw = audio_embed.detach().clone()
+        layer_norm = nn.LayerNorm(self.embedding_dim)
 
+        audio_embed = layer_norm(self.AudioAttention(audio_embed, text_embed, text_embed)[0] + text_embed)
+        audio_embed = layer_norm(self.AudioAttentionFF(audio_embed) + audio_embed)
+
+        text_embed = layer_norm(self.TextAttention(text_embed, audio_embed_raw, audio_embed_raw)[0] + audio_embed_raw)
+        text_embed = layer_norm(self.TextAttentionFF(text_embed) + text_embed)
 
         return torch.stack((audio_embed, text_embed))
 
