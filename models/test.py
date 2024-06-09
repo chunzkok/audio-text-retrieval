@@ -8,7 +8,7 @@ def speech_file_to_array(path: str, target_rate: int) -> np.ndarray:
     speech = torchaudio.transforms.Resample(sampling_rate, target_rate)(speech)
   return speech.squeeze().numpy()
 
-eval_audio_path = "/home/k/kokcz/dso/datasets/clotho/evaluation/Santa Motor.wav"
+eval_audio_path = "../../datasets/clotho/evaluation/Santa Motor.wav"
 eval_captions = ["A machine whines and squeals while rhythmically punching or stamping.",
         "A person is using electric clippers to trim bushes.",
         "Someone is trimming the bushes with electric clippers.",

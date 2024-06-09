@@ -34,15 +34,10 @@ class TextEncoder(nn.Module, ABC):
 # RoBERTa Encoder
 class RoBERTaEncoder(TextEncoder):
     HF_name = "FacebookAI/roberta-base"
-    FIXED_ENCODE_LENGTH = 30
 
     def __init__(self, hidden_dim: int, out_dim: int):
         encoder = RobertaModel.from_pretrained(RoBERTaEncoder.HF_name)
-        super().__init__(
-            encoder.config.hidden_size * RoBERTaEncoder.FIXED_ENCODE_LENGTH,
-            hidden_dim,
-            out_dim
-        )
+        super().__init__(encoder.config.hidden_size, hidden_dim, out_dim)
         self.encoder = encoder
 
     def preprocess(self, 
@@ -55,9 +50,6 @@ class RoBERTaEncoder(TextEncoder):
         with torch.no_grad():
             output : modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions = self.encoder(**x)
 
-        output = output.last_hidden_state
-        # temporary hacky solution
-        output = torch.nn.functional.pad(output, (0, 0, 0, RoBERTaEncoder.FIXED_ENCODE_LENGTH))
-        output = output.narrow(1, 0, RoBERTaEncoder.FIXED_ENCODE_LENGTH)
-        output = output.reshape(-1, RoBERTaEncoder.FIXED_ENCODE_LENGTH * self.encoder.config.hidden_size)
+        # Uses the sentence embedding for the [CLS] token
+        output = output.pooler_output
         return output
