@@ -12,7 +12,7 @@ from typing import Any, Callable, List, Optional, Union
 class AudioTextOutput(ModelOutput):
     # should be of shape (B, 2, E) where B = batch size, E = embedding dim. 
     # slice [b, 0, :] should give audio embedding of item b in the batch
-    # slice [b, 1, :] should give textembedding of item b in the batch
+    # slice [b, 1, :] should give text embedding of item b in the batch
     embeddings: torch.FloatTensor 
 
     loss: torch.FloatTensor = None
@@ -74,13 +74,13 @@ class AudioTextRetriever(nn.Module):
     # First number represents audio embedding.
     # Second number represents text embedding.
     def forward(self,
-                raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]], 
+                raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]], 
                 sentence: Union[str, List[str], List[List[str]]], 
                 sampling_rate: Optional[int] = 16000,
                 return_dict: Optional[bool] = True,
                 labels: Any = None
                 ) -> torch.FloatTensor:
-        audio_embed = self.AudioEncoder.preprocess(raw_speech, sampling_rate)
+        audio_embed = self.AudioEncoder.preprocess(raw_audio, sampling_rate)
         print(f"audio preprocess dims: {audio_embed.input_values.shape}")
         audio_embed = self.AudioEncoder(audio_embed)
         print(f"audio embed dims: {audio_embed.shape}")

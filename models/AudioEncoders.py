@@ -18,7 +18,7 @@ class AudioEncoder(nn.Module, ABC):
 
     @abstractmethod
     def preprocess(self, 
-                   raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]], 
+                   raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]], 
                    sampling_rate: Optional[int] = None, 
                    return_tensors: Optional[str] = None) -> BatchEncoding:
         raise NotImplementedError
@@ -41,26 +41,22 @@ class ASTEncoder(AudioEncoder):
     def __init__(self, hidden_dim: int, out_dim: int):
         encoder = ASTModel.from_pretrained(ASTEncoder.HF_name)
         super().__init__(
-            encoder.config.hidden_size * ASTEncoder.FIXED_ENCODE_LENGTH, 
-            hidden_dim, 
+            encoder.config.hidden_size, hidden_dim, 
             out_dim
         )
         self.encoder = encoder
 
     def preprocess(self, 
-                   raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]], 
+                   raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]], 
                    sampling_rate: Optional[int] = None, 
                    return_tensors: Optional[str] = "pt") -> BatchEncoding:
         processor = AutoProcessor.from_pretrained(ASTEncoder.HF_name)
-        return processor(raw_speech, sampling_rate, return_tensors)
+        return processor(raw_audio, sampling_rate, return_tensors)
 
     def _encode(self, x: BatchEncoding) -> torch.Tensor:
         with torch.no_grad():
             output : modeling_outputs.BaseModelOutputWithPooling = self.encoder(**x)
 
         output = output.last_hidden_state
-        # temporary hacky solution
-        output = torch.nn.functional.pad(output, (0, 0, 0, ASTEncoder.FIXED_ENCODE_LENGTH))
-        output = output.narrow(1, 0, ASTEncoder.FIXED_ENCODE_LENGTH)
-        output = output.reshape(-1, ASTEncoder.FIXED_ENCODE_LENGTH * self.encoder.config.hidden_size)
+        output = output.mean(dim=1) # average over time dimension
         return output
