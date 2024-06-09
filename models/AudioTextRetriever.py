@@ -3,8 +3,29 @@ import torch
 
 from AudioEncoders import AudioEncoder, ASTEncoder
 from TextEncoders import TextEncoder, RoBERTaEncoder
+from dataclasses import dataclass
 from torch import nn
+from transformers.utils import ModelOutput
 from typing import List, Optional, Union
+
+@dataclass
+class AudioTextOutput(ModelOutput):
+    audio_embedding: torch.FloatTensor
+    text_embedding: torch.FloatTensor
+
+    def __getitem__(self, key):
+        if key == None: 
+            return None
+        if type(key) == int and key not in (0, 1):
+            return None
+        if type(key) == slice:
+            return self.to_tuple()[key]
+
+        return getattr(self, key)
+       
+    def to_tuple(self):
+        return (self.audio_embedding, self.text_embedding)
+
 
 class AudioTextRetriever(nn.Module):
     # put in closures to avoid unnecessary evaluation
@@ -48,8 +69,8 @@ class AudioTextRetriever(nn.Module):
     # Second number represents text embedding.
     def forward(self,
                 raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]], 
-                sampling_rate: int, 
                 sentence: Union[str, List[str], List[List[str]]], 
+                sampling_rate: Optional[int] = 16000, 
                 ) -> torch.FloatTensor:
         audio_embed = self.AudioEncoder.preprocess(raw_speech, sampling_rate)
         print(f"audio preprocess dims: {audio_embed.input_values.shape}")
@@ -70,6 +91,4 @@ class AudioTextRetriever(nn.Module):
         text_embed = layer_norm(self.TextAttention(text_embed, audio_embed_raw, audio_embed_raw)[0] + audio_embed_raw)
         text_embed = layer_norm(self.TextAttentionFF(text_embed) + text_embed)
 
-        return torch.stack((audio_embed, text_embed))
-
-
+        return AudioTextOutput(audio_embed, text_embed)

@@ -44,7 +44,7 @@ class RoBERTaEncoder(TextEncoder):
                    sentence: Union[str, List[str], List[List[str]]], 
                    return_tensors: Optional[str] = "pt") -> BatchEncoding:
         tokenizer = AutoTokenizer.from_pretrained(RoBERTaEncoder.HF_name)
-        return tokenizer(sentence, return_tensors=return_tensors)
+        return tokenizer(sentence, return_tensors=return_tensors, padding=True)
 
     def _encode(self, x: BatchEncoding) -> torch.Tensor:
         with torch.no_grad():
