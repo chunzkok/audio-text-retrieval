@@ -1,8 +1,15 @@
 import pandas as pd
 
 from abc import ABC, abstractmethod
-from pathlib import Path
 from datasets import Dataset
+from enum import Enum
+from pathlib import Path
+from typing import Optional
+
+class SplitType(Enum):
+    DEV = 1
+    VAL = 2
+    TEST = 3
 
 class Parser(ABC):
     """
@@ -10,29 +17,31 @@ class Parser(ABC):
     under the /utils/DataTools.py file.
     This class should implement methods to export the parsed data in either pd.DataFrame or
     datasets.Dataset form.
-    The exported data should also contain three columns: 
+    The exported data should contain 2-3 columns: 
         1. path to the audio file (str), and
         2. caption(s) (str | List[str])
-        3. split (str - one of {'dev', 'val', 'test'})
+        3. split (Optional[SplitType])
+            - only present when no arguments are passed into to_hf or to_pd
 
     Methods
     -------
-    to_hf():
+    to_hf(split: Optional[SplitType]):
         Abstract method.
         Should return a dataset.Datset instance containing the columns as described.
 
-    to_pd():
+    to_pd(split: Optional[SplitType]):
         Abstract method.
         Should return a pd.DataFrame instance containing the columns as described.
     """
 
     @abstractmethod
-    def to_hf(self) -> Dataset:
+    def to_hf(self, split: Optional[SplitType]) -> Dataset:
         raise NotImplementedError("Parser::to_hf is not implemented yet!")
 
     @abstractmethod
-    def to_pd(self) -> pd.DataFrame:
+    def to_pd(self, split: Optional[SplitType]) -> pd.DataFrame:
         raise NotImplementedError("Parser::to_pd is not implemented yet!")
+
 
 
 class ClothoParser(Parser):
@@ -69,9 +78,9 @@ class ClothoParser(Parser):
         self.captions = []
         self.split = []
         split_mapping = {
-            "development": "dev",
-            "validation": "val",
-            "evaluation": "test"
+            "development": "DEV",
+            "validation": "VAL",
+            "evaluation": "TEST"
         }
 
         for split_name in ("development", "validation", "evaluation"):
@@ -86,12 +95,18 @@ class ClothoParser(Parser):
             self.split.extend([split_mapping[split_name]] * len(df))
             assert len(self.file_paths) == len(self.captions) == len(self.split)
 
-    def to_hf(self) -> Dataset:
-        return Dataset.from_pandas(self.to_pd())
+    def to_hf(self, split: Optional[SplitType] = None) -> Dataset:
+        return Dataset.from_pandas(self.to_pd(split))
 
-    def to_pd(self) -> pd.DataFrame:
-        return pd.DataFrame({
-            "path": self.file_paths,
-            "caption": self.captions,
-            "split": self.split
-        })
+    def to_pd(self, split: Optional[SplitType] = None) -> pd.DataFrame:
+        df = pd.DataFrame({
+                "path": self.file_paths,
+                "caption": self.captions,
+                "split": self.split
+            })
+
+        if split != None:
+            df = df[df["split"] == split.name] # filter DEV rows
+            df = df.iloc[:, :2] # remove `split`` col
+
+        return df.reset_index(drop=True)
