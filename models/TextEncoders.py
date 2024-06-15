@@ -37,6 +37,8 @@ class RoBERTaEncoder(TextEncoder):
 
     def __init__(self, hidden_dim: int, out_dim: int):
         encoder = RobertaModel.from_pretrained(RoBERTaEncoder.HF_name)
+        if type(encoder) != RobertaModel:
+            raise Exception("Could not initialise RoBERTaEncoder: perhaps the HF_name is set wrongly?")
         super().__init__(encoder.config.hidden_size, hidden_dim, out_dim)
         self.encoder = encoder
 
@@ -46,10 +48,11 @@ class RoBERTaEncoder(TextEncoder):
         tokenizer = AutoTokenizer.from_pretrained(RoBERTaEncoder.HF_name)
         return tokenizer(sentence, return_tensors=return_tensors, padding=True)
 
-    def _encode(self, x: BatchEncoding) -> torch.Tensor:
+    def _encode(self, x: BatchEncoding) -> torch.FloatTensor:
         with torch.no_grad():
             output : modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions = self.encoder(**x)
 
         # Uses the sentence embedding for the [CLS] token
-        output = output.pooler_output
-        return output
+        embed = output.pooler_output
+        assert isinstance(embed, torch.FloatTensor)
+        return embed 

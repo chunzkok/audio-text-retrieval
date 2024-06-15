@@ -6,29 +6,39 @@ from TextEncoders import TextEncoder, RoBERTaEncoder
 from dataclasses import dataclass
 from torch import nn
 from transformers.utils import ModelOutput
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, Callable, List, Optional, Tuple, Union
 
 @dataclass
 class AudioTextOutput(ModelOutput):
     # should be of shape (B, 2, E) where B = batch size, E = embedding dim. 
     # slice [b, 0, :] should give audio embedding of item b in the batch
     # slice [b, 1, :] should give text embedding of item b in the batch
-    embeddings: torch.FloatTensor 
+    embeddings: torch.Tensor 
 
-    loss: torch.FloatTensor = None
+    loss: Optional[torch.Tensor] = None
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: Union[str, int, slice, None]):
         if key == None: 
             return None
-        if type(key) == int and key not in (0, 1):
-            return None
-        if type(key) == slice:
+        elif type(key) == int:
+            if key == 0:
+                return self.embeddings
+            elif key == 1:
+                return self.loss
+            else: 
+                return None
+        elif type(key) == slice:
             return self.to_tuple()[key]
-
-        return getattr(self, key)
+        else:
+            # can only be of type str here
+            assert type(key) == str 
+            return getattr(self, key)
        
-    def to_tuple(self):
-        return (self.embeddings, self.loss)
+    # ModelOutput::to_tuple specifies return value of Tuple[Any].
+    # Conflicts with below tuple type, though semantically the Tuple[Any] should just be a tuple of any size 
+    # containing all non-none attributes.
+    def to_tuple(self): # type: ignore
+        return (self.embeddings, self.loss) if self.loss is not None else (self.embeddings,)
 
 
 class AudioTextRetriever(nn.Module):
@@ -40,8 +50,8 @@ class AudioTextRetriever(nn.Module):
                  loss_fn: Callable[[torch.FloatTensor, torch.FloatTensor, torch.Tensor], torch.FloatTensor],
                  text_enc: Optional[TextEncoder] = None, 
                  audio_enc: Optional[AudioEncoder] = None,
-                 num_heads: Optional[int] = 8,
-                 dropout: Optional[float] = 0.2):
+                 num_heads: int = 8,
+                 dropout: float = 0.2):
         super().__init__()
         self.AudioEncoder = (
             audio_enc if audio_enc is not None
@@ -78,8 +88,8 @@ class AudioTextRetriever(nn.Module):
                 sentence: Union[str, List[str], List[List[str]]], 
                 sampling_rate: Optional[int] = 16000,
                 return_dict: Optional[bool] = True,
-                labels: Optional[Union[np.ndarray, List[bool]]]= None
-                ) -> torch.FloatTensor:
+                labels: Optional[Union[np.ndarray, List[bool], torch.Tensor]]= None
+                ) -> AudioTextOutput | Tuple:
         audio_embed = self.AudioEncoder.preprocess(raw_audio, sampling_rate)
         print(f"audio preprocess dims: {audio_embed.input_values.shape}")
         audio_embed = self.AudioEncoder(audio_embed)
@@ -100,7 +110,12 @@ class AudioTextRetriever(nn.Module):
         text_embed = layer_norm(self.TextAttentionFF(text_embed) + text_embed)
 
         embeddings = torch.stack((audio_embed, text_embed))
-        loss = self.loss_fn(audio_embed, text_embed, labels) if labels is not None else None
+
+        if labels: # labels present, calculate loss
+            tensor_labels = torch.Tensor(labels) 
+            loss = self.loss_fn(audio_embed, text_embed, tensor_labels)
+        else: # labels absent, no loss calculated
+            loss = None
 
         return (AudioTextOutput(embeddings=embeddings, loss=loss) if return_dict 
                 else (loss, embeddings)) # Trainer specifies to return loss as first element if a tuple is returned

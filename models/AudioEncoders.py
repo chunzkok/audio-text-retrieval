@@ -40,6 +40,8 @@ class ASTEncoder(AudioEncoder):
 
     def __init__(self, hidden_dim: int, out_dim: int):
         encoder = ASTModel.from_pretrained(ASTEncoder.HF_name)
+        if type(encoder) != ASTModel:
+            raise Exception("Could not initialise ASTEncoder: perhaps the HF_name is set wrongly?")
         super().__init__(
             encoder.config.hidden_size, hidden_dim, 
             out_dim
@@ -57,6 +59,7 @@ class ASTEncoder(AudioEncoder):
         with torch.no_grad():
             output : modeling_outputs.BaseModelOutputWithPooling = self.encoder(**x)
 
-        output = output.last_hidden_state
-        output = output.mean(dim=1) # average over time dimension
-        return output
+        embed = output.last_hidden_state
+        assert isinstance(embed, torch.FloatTensor)
+        embed = embed.mean(dim=1) # average over time dimension
+        return embed 

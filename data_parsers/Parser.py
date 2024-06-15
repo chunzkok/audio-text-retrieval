@@ -85,9 +85,10 @@ class ClothoParser(Parser):
 
         for split_name in ("development", "validation", "evaluation"):
             caps_path = self.root_path.joinpath(f"clotho_captions_{split_name}.csv")
+            audio_path = self.root_path.joinpath(split_name)
             df = pd.read_csv(caps_path)
             
-            self.file_paths.extend([str(caps_path.joinpath(fname)) for fname in df["file_name"]])
+            self.file_paths.extend([str(audio_path.joinpath(fname)) for fname in df["file_name"]])
 
             captions_df = df.iloc[:, 1:]
             self.captions.extend(captions_df.apply(lambda row: list(row), axis=1))
