@@ -1,12 +1,28 @@
 import numpy as np
 import torch
+import torchaudio
 from typing import Callable, List, Optional, Union
+
+def path_to_audio(path: str | List[str], sampling_rate: int = 16_000) -> np.ndarray | List[np.ndarray]:
+    if type(path) == List:
+        return [_path_to_audio_single(p, sampling_rate) for p in path]
+    else:
+        assert type(path) == str
+        return _path_to_audio_single(path, sampling_rate)
+
+def _path_to_audio_single(path: str, target_rate: int) -> np.ndarray:
+    raw_audio, sampling_rate = torchaudio.load(path)
+    if (sampling_rate != target_rate):
+        raw_audio = torchaudio.transforms.Resample(sampling_rate, target_rate)(raw_audio)
+    return raw_audio.squeeze().numpy()
 
 class AudioTextDataCollator:
     def __init__(
             self, 
-            path_to_audio_converter: Callable[[Union[str, List[str]]], Union[np.ndarray, List[np.ndarray], torch.Tensor]], 
-            k: int):
+            k: int,
+            path_to_audio_converter: Callable[[Union[str, List[str]]], Union[np.ndarray, List[np.ndarray], torch.Tensor]] 
+                = path_to_audio
+        ):
         self.path_to_audio_converter = path_to_audio_converter # should output at the correct sampling rate too!
         self.k = k # Number of negative samples per audio file
 
