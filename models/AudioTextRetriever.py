@@ -93,14 +93,10 @@ class AudioTextRetriever(nn.Module):
                 labels: Optional[Union[np.ndarray, List[bool], torch.Tensor]]= None
                 ) -> AudioTextOutput | Tuple:
         audio_embed = self.AudioEncoder.preprocess(raw_audio, sampling_rate)
-        print(f"audio preprocess dims: {audio_embed.input_values.shape}")
         audio_embed = self.AudioEncoder(audio_embed)
-        print(f"audio embed dims: {audio_embed.shape}")
 
         text_embed = self.TextEncoder.preprocess(sentence)
-        print(f"text preprocess dims: {text_embed.input_ids.shape}")
         text_embed = self.TextEncoder(text_embed)
-        print(f"text embed dims: {text_embed.shape}")
 
         audio_embed_raw = audio_embed.detach().clone()
         layer_norm = nn.LayerNorm(self.embedding_dim).to(device)

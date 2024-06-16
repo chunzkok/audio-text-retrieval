@@ -31,7 +31,6 @@ class AudioEncoder(nn.Module, ABC):
 
     def forward(self, x: BatchEncoding) -> torch.Tensor:
         res = self._encode(x)
-        print(f"audio encode dims: {res.shape}")
         res = self.MLP(res)
         return res
 

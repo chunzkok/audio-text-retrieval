@@ -29,7 +29,6 @@ class TextEncoder(nn.Module, ABC):
 
     def forward(self, x: BatchEncoding) -> torch.FloatTensor:
         res = self._encode(x)
-        print(f"text encode dims: {res.shape}")
         res = self.MLP(res)
         return res
 
