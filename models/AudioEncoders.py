@@ -6,6 +6,8 @@ from torch import nn
 from transformers import ASTModel, AutoProcessor, BatchEncoding, modeling_outputs
 from typing import List, Optional, Union
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 class AudioEncoder(nn.Module, ABC):
     def __init__(self, encoder_dim: int, hidden_dim: int, out_dim: int):
         super().__init__()
@@ -13,7 +15,7 @@ class AudioEncoder(nn.Module, ABC):
             nn.Linear(encoder_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, out_dim)
-        )
+        ).to(device)
         self.out_dim = out_dim
 
     @abstractmethod
@@ -53,13 +55,13 @@ class ASTEncoder(AudioEncoder):
                    sampling_rate: Optional[int] = None, 
                    return_tensors: Optional[str] = "pt") -> BatchEncoding:
         processor = AutoProcessor.from_pretrained(ASTEncoder.HF_name)
-        return processor(raw_audio, sampling_rate, return_tensors)
+        return processor(raw_audio, sampling_rate, return_tensors).to(device)
 
     def _encode(self, x: BatchEncoding) -> torch.Tensor:
         with torch.no_grad():
             output : modeling_outputs.BaseModelOutputWithPooling = self.encoder(**x)
 
         embed = output.last_hidden_state
-        assert isinstance(embed, torch.FloatTensor)
+        assert isinstance(embed, torch.Tensor)
         embed = embed.mean(dim=1) # average over time dimension
         return embed 

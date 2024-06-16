@@ -5,6 +5,8 @@ from torch import nn
 from transformers import AutoTokenizer, BatchEncoding, RobertaModel, modeling_outputs
 from typing import List, Optional, Union
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 class TextEncoder(nn.Module, ABC):
     def __init__(self, encoder_dim: int, hidden_dim: int, out_dim: int):
         super().__init__()
@@ -46,7 +48,7 @@ class RoBERTaEncoder(TextEncoder):
                    sentence: Union[str, List[str], List[List[str]]], 
                    return_tensors: Optional[str] = "pt") -> BatchEncoding:
         tokenizer = AutoTokenizer.from_pretrained(RoBERTaEncoder.HF_name)
-        return tokenizer(sentence, return_tensors=return_tensors, padding=True)
+        return tokenizer(sentence, return_tensors=return_tensors, padding=True).to(device)
 
     def _encode(self, x: BatchEncoding) -> torch.FloatTensor:
         with torch.no_grad():
@@ -54,5 +56,5 @@ class RoBERTaEncoder(TextEncoder):
 
         # Uses the sentence embedding for the [CLS] token
         embed = output.pooler_output
-        assert isinstance(embed, torch.FloatTensor)
+        assert isinstance(embed, torch.Tensor)
         return embed 

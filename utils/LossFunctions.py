@@ -5,8 +5,8 @@ from typing import Optional
 
 
 def contrastiveCE(
-        audio_embed: torch.FloatTensor, 
-        text_embed: torch.FloatTensor, 
+        audio_embed: torch.Tensor, 
+        text_embed: torch.Tensor, 
         labels: torch.Tensor, 
         temperature: Optional[float] = 0.2
     ):

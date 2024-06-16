@@ -1,12 +1,14 @@
 import numpy as np
 import torch
 
-from AudioEncoders import AudioEncoder, ASTEncoder
-from TextEncoders import TextEncoder, RoBERTaEncoder
+from .AudioEncoders import AudioEncoder, ASTEncoder
+from .TextEncoders import TextEncoder, RoBERTaEncoder
 from dataclasses import dataclass
 from torch import nn
 from transformers.utils import ModelOutput
 from typing import Any, Callable, List, Optional, Tuple, Union
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 @dataclass
 class AudioTextOutput(ModelOutput):
@@ -47,7 +49,7 @@ class AudioTextRetriever(nn.Module):
     DEFAULT_TEXT_ENCODER = lambda: RoBERTaEncoder(2048, 1024)
 
     def __init__(self, 
-                 loss_fn: Callable[[torch.FloatTensor, torch.FloatTensor, torch.Tensor], torch.FloatTensor],
+                 loss_fn: Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor],
                  text_enc: Optional[TextEncoder] = None, 
                  audio_enc: Optional[AudioEncoder] = None,
                  num_heads: int = 8,
@@ -56,11 +58,11 @@ class AudioTextRetriever(nn.Module):
         self.AudioEncoder = (
             audio_enc if audio_enc is not None
             else AudioTextRetriever.DEFAULT_AUDIO_ENCODER()
-        )
+        ).to(device)
         self.TextEncoder = (
             text_enc if text_enc is not None 
             else AudioTextRetriever.DEFAULT_TEXT_ENCODER()
-        )
+        ).to(device)
         self.loss_fn = loss_fn
 
         # both are mapping to the same embedding space, so both encoders must have same output dimensions
@@ -71,14 +73,14 @@ class AudioTextRetriever(nn.Module):
         self.AudioAttention = nn.MultiheadAttention(
             embed_dim = self.embedding_dim,
             num_heads = num_heads,
-            dropout = dropout)
-        self.AudioAttentionFF = nn.Linear(self.embedding_dim, self.embedding_dim)
+            dropout = dropout).to(device)
+        self.AudioAttentionFF = nn.Linear(self.embedding_dim, self.embedding_dim).to(device)
 
         self.TextAttention = nn.MultiheadAttention(
             embed_dim = self.embedding_dim,
             num_heads = num_heads,
-            dropout = dropout)
-        self.TextAttentionFF = nn.Linear(self.embedding_dim, self.embedding_dim)
+            dropout = dropout).to(device)
+        self.TextAttentionFF = nn.Linear(self.embedding_dim, self.embedding_dim).to(device)
 
     # Returns a tensor of size (2, embedding_dim).
     # First number represents audio embedding.
@@ -101,7 +103,7 @@ class AudioTextRetriever(nn.Module):
         print(f"text embed dims: {text_embed.shape}")
 
         audio_embed_raw = audio_embed.detach().clone()
-        layer_norm = nn.LayerNorm(self.embedding_dim)
+        layer_norm = nn.LayerNorm(self.embedding_dim).to(device)
 
         audio_embed = layer_norm(self.AudioAttention(audio_embed, text_embed, text_embed)[0] + text_embed)
         audio_embed = layer_norm(self.AudioAttentionFF(audio_embed) + audio_embed)
@@ -112,7 +114,7 @@ class AudioTextRetriever(nn.Module):
         embeddings = torch.stack((audio_embed, text_embed))
 
         if labels: # labels present, calculate loss
-            tensor_labels = torch.Tensor(labels) 
+            tensor_labels = torch.Tensor(labels).type("torch.LongTensor").to(device)
             loss = self.loss_fn(audio_embed, text_embed, tensor_labels)
         else: # labels absent, no loss calculated
             loss = None
