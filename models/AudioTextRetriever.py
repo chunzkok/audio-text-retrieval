@@ -5,8 +5,9 @@ from .AudioEncoders import AudioEncoder, ASTEncoder
 from .TextEncoders import TextEncoder, RoBERTaEncoder
 from dataclasses import dataclass
 from torch import nn
+from transformers import BatchEncoding
 from transformers.utils import ModelOutput
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -82,21 +83,17 @@ class AudioTextRetriever(nn.Module):
             dropout = dropout).to(device)
         self.TextAttentionFF = nn.Linear(self.embedding_dim, self.embedding_dim).to(device)
 
-    # Returns a tensor of size (2, embedding_dim).
-    # First number represents audio embedding.
-    # Second number represents text embedding.
+    # Returns a tensor of size (B, 2, embedding_dim).
+    # Tensor at [:, 0, :] represents audio embedding.
+    # Tensor at [:, 1, :] represents text embedding.
     def forward(self,
-                raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]], 
-                sentence: Union[str, List[str], List[List[str]]], 
-                sampling_rate: Optional[int] = 16000,
+                raw_audio: BatchEncoding, 
+                sentence: BatchEncoding, 
                 return_dict: Optional[bool] = True,
                 labels: Optional[Union[np.ndarray, List[bool], torch.Tensor]]= None
                 ) -> AudioTextOutput | Tuple:
-        audio_embed = self.AudioEncoder.preprocess(raw_audio, sampling_rate)
-        audio_embed = self.AudioEncoder(audio_embed)
-
-        text_embed = self.TextEncoder.preprocess(sentence)
-        text_embed = self.TextEncoder(text_embed)
+        audio_embed = self.AudioEncoder(raw_audio)
+        text_embed = self.TextEncoder(sentence)
 
         audio_embed_raw = audio_embed.detach().clone()
         layer_norm = nn.LayerNorm(self.embedding_dim).to(device)

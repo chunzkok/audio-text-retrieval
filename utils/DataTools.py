@@ -1,7 +1,8 @@
 import numpy as np
 import torch
 import torchaudio
-from typing import Callable, List, Optional, Union
+from typing import Any, Callable, Dict, List, Union
+from transformers import BatchEncoding
 
 def path_to_audio(path: str | List[str], sampling_rate: int = 16_000) -> np.ndarray | List[np.ndarray]:
     if type(path) == list:
@@ -20,16 +21,20 @@ class AudioTextDataCollator:
     def __init__(
             self, 
             k: int,
-            path_to_audio_converter: Callable[[Union[str, List[str]]], Union[np.ndarray, List[np.ndarray], torch.Tensor]] 
+            audio_processor: Callable[[Union[np.ndarray, List[np.ndarray], torch.Tensor], int], BatchEncoding],
+            text_tokenizer: Callable[[Union[str, List[str]]], BatchEncoding],
+            path_to_audio_converter: Callable[[Union[str, List[str]], int], Union[np.ndarray, List[np.ndarray], torch.Tensor]] 
                 = path_to_audio
         ):
         self.path_to_audio_converter = path_to_audio_converter # should output at the correct sampling rate too!
         self.k = k # Half of the number of negative samples per audio file (i.e. # neg samples = 2k)
+        self.audio_processor = audio_processor
+        self.text_tokenizer = text_tokenizer
 
-    def __call__(self, inputs):
-        raw_audio = self.path_to_audio_converter([input["path"] for input in inputs])
+    def __call__(self, inputs, sampling_rate: int = 16_000):
+        raw_audio = self.path_to_audio_converter([input["path"] for input in inputs], sampling_rate)
         caption = [input["caption"] for input in inputs]
-        batch = {
+        batch: Dict[str, Any] = {
             "raw_audio": [],
             "sentence": [],
             "labels": []
@@ -39,7 +44,7 @@ class AudioTextDataCollator:
         for i in range(N):
             audio = raw_audio[i]
 
-            if type(caption[i] == list):
+            if type(caption[i]) == list:
                 sentence = np.random.choice(caption[i])
             else:
                 sentence = caption[i]
@@ -65,6 +70,8 @@ class AudioTextDataCollator:
                 batch["sentence"].append(current_caption)
                 batch["labels"].append(0)
 
+        batch["raw_audio"] = self.audio_processor(batch["raw_audio"], sampling_rate)
+        batch["sentence"] = self.text_tokenizer(batch["sentence"])
         return batch
 
     def _random_index_excluding(

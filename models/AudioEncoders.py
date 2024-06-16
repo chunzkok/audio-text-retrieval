@@ -20,7 +20,7 @@ class AudioEncoder(nn.Module, ABC):
 
     @abstractmethod
     def preprocess(self, 
-                   raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]], 
+                   raw_audio: Union[np.ndarray, List[float], List[np.ndarray], torch.Tensor], 
                    sampling_rate: Optional[int] = None, 
                    return_tensors: Optional[str] = None) -> BatchEncoding:
         raise NotImplementedError
@@ -50,7 +50,7 @@ class ASTEncoder(AudioEncoder):
         self.encoder = encoder
 
     def preprocess(self, 
-                   raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]], 
+                   raw_audio: Union[np.ndarray, List[float], List[np.ndarray], torch.Tensor], 
                    sampling_rate: Optional[int] = None, 
                    return_tensors: Optional[str] = "pt") -> BatchEncoding:
         processor = AutoProcessor.from_pretrained(ASTEncoder.HF_name)

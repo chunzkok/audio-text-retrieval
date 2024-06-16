@@ -35,7 +35,7 @@ if __name__=="__main__":
         group_by_length=False,
         per_device_train_batch_size=32,
         per_device_eval_batch_size=32,
-        evaluation_strategy="steps",
+        eval_strategy="steps",
         num_train_epochs=50,
         fp16=False,
         save_steps=1024,
