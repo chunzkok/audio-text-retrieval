@@ -36,7 +36,7 @@ class TextEncoder(nn.Module, ABC):
 class RoBERTaEncoder(TextEncoder):
     HF_name = "FacebookAI/roberta-base"
 
-    def __init__(self, hidden_dim: int, out_dim: int):
+    def __init__(self, hidden_dim: int = 2048, out_dim: int = 1024):
         encoder = RobertaModel.from_pretrained(RoBERTaEncoder.HF_name)
         if type(encoder) != RobertaModel:
             raise Exception("Could not initialise RoBERTaEncoder: perhaps the HF_name is set wrongly?")
@@ -47,7 +47,7 @@ class RoBERTaEncoder(TextEncoder):
                    sentence: Union[str, List[str], List[List[str]]], 
                    return_tensors: Optional[str] = "pt") -> BatchEncoding:
         tokenizer = AutoTokenizer.from_pretrained(RoBERTaEncoder.HF_name)
-        return tokenizer(sentence, return_tensors=return_tensors, padding=True).to(device)
+        return tokenizer(sentence, return_tensors=return_tensors, padding=True)
 
     def _encode(self, x: BatchEncoding) -> torch.FloatTensor:
         with torch.no_grad():

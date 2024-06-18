@@ -39,7 +39,7 @@ class ASTEncoder(AudioEncoder):
     HF_name = "MIT/ast-finetuned-audioset-10-10-0.4593"
     FIXED_ENCODE_LENGTH = 1214
 
-    def __init__(self, hidden_dim: int, out_dim: int):
+    def __init__(self, hidden_dim: int = 2048, out_dim: int = 1024):
         encoder = ASTModel.from_pretrained(ASTEncoder.HF_name)
         if type(encoder) != ASTModel:
             raise Exception("Could not initialise ASTEncoder: perhaps the HF_name is set wrongly?")
@@ -54,7 +54,7 @@ class ASTEncoder(AudioEncoder):
                    sampling_rate: Optional[int] = None, 
                    return_tensors: Optional[str] = "pt") -> BatchEncoding:
         processor = AutoProcessor.from_pretrained(ASTEncoder.HF_name)
-        return processor(raw_audio, sampling_rate, return_tensors).to(device)
+        return processor(raw_audio, sampling_rate, return_tensors)
 
     def _encode(self, x: BatchEncoding) -> torch.Tensor:
         with torch.no_grad():

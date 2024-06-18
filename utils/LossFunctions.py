@@ -20,4 +20,6 @@ def contrastiveCE(
         + functional.cross_entropy(logits_text2audio, labels)
     )
 
-
+def create_contrastive_loss(temperature: float = 0.2):
+    print(f"Created contrastive loss function with temperature {temperature}")
+    return lambda audio, text, labels: contrastiveCE(audio, text, labels, temperature)

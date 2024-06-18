@@ -106,7 +106,7 @@ class AudioTextRetriever(nn.Module):
 
         embeddings = torch.stack((audio_embed, text_embed))
 
-        if labels: # labels present, calculate loss
+        if labels is not None: # labels present, calculate loss
             tensor_labels = torch.Tensor(labels).type("torch.LongTensor").to(device)
             loss = self.loss_fn(audio_embed, text_embed, tensor_labels)
         else: # labels absent, no loss calculated

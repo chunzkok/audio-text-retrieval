@@ -5,17 +5,21 @@ from data_parsers.Parser import ClothoParser, SplitType
 from utils.DataTools import AudioTextDataCollator
 from utils.LossFunctions import contrastiveCE
 from models.AudioTextRetriever import AudioTextRetriever
+from models.AudioEncoders import ASTEncoder
+from models.TextEncoders import RoBERTaEncoder
 from transformers import EvalPrediction, Trainer, TrainingArguments
 from typing import Dict
 
 if __name__=="__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    parser = ClothoParser("../datasets/clotho")
+    parser = ClothoParser("dso/datasets/clotho")
     train_set = parser.to_hf(SplitType.DEV)
     val_set = parser.to_hf(SplitType.VAL)
+    audio_encoder = ASTEncoder()
+    text_encoder = RoBERTaEncoder()
 
-    collator = AudioTextDataCollator(3)
+    collator = AudioTextDataCollator(3, audio_encoder.preprocess, text_encoder.preprocess)
     retriever = AudioTextRetriever(contrastiveCE).to(device)
 
     def compute_metrics(output: EvalPrediction) -> Dict[str, float]:
@@ -30,17 +34,17 @@ if __name__=="__main__":
 
 
     train_args = TrainingArguments(
-        output_dir="../train_out",
+        output_dir="dso/train_out",
         overwrite_output_dir=True,
         group_by_length=False,
-        per_device_train_batch_size=32,
+        per_device_train_batch_size=64,
         per_device_eval_batch_size=32,
         eval_strategy="steps",
         num_train_epochs=50,
         fp16=False,
-        save_steps=1024,
-        eval_steps=512,
-        logging_steps=64,
+        save_steps=128,
+        eval_steps=1,
+        logging_steps=32,
         optim="adamw_torch",
         learning_rate=0.2,
         save_total_limit=2,

@@ -72,6 +72,7 @@ class AudioTextDataCollator:
 
         batch["raw_audio"] = self.audio_processor(batch["raw_audio"], sampling_rate)
         batch["sentence"] = self.text_tokenizer(batch["sentence"])
+        batch["labels"] = torch.tensor(batch["labels"])
         return batch
 
     def _random_index_excluding(
