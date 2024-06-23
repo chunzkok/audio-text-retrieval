@@ -22,7 +22,8 @@ class AudioEncoder(nn.Module, ABC):
     def preprocess(self, 
                    raw_audio: Union[np.ndarray, List[float], List[np.ndarray], torch.Tensor], 
                    sampling_rate: Optional[int] = None, 
-                   return_tensors: Optional[str] = None) -> BatchEncoding:
+                   return_tensors: Optional[str] = None,
+                   device: Optional[str] = None) -> BatchEncoding:
         raise NotImplementedError
 
     @abstractmethod
@@ -39,8 +40,8 @@ class ASTEncoder(AudioEncoder):
     HF_name = "MIT/ast-finetuned-audioset-10-10-0.4593"
     FIXED_ENCODE_LENGTH = 1214
 
-    def __init__(self, hidden_dim: int = 2048, out_dim: int = 1024):
-        encoder = ASTModel.from_pretrained(ASTEncoder.HF_name)
+    def __init__(self, hidden_dim: int = 2048, out_dim: int = 1024, load_from: str = HF_name):
+        encoder = ASTModel.from_pretrained(load_from)
         if type(encoder) != ASTModel:
             raise Exception("Could not initialise ASTEncoder: perhaps the HF_name is set wrongly?")
         super().__init__(
@@ -52,9 +53,13 @@ class ASTEncoder(AudioEncoder):
     def preprocess(self, 
                    raw_audio: Union[np.ndarray, List[float], List[np.ndarray], torch.Tensor], 
                    sampling_rate: Optional[int] = None, 
-                   return_tensors: Optional[str] = "pt") -> BatchEncoding:
+                   return_tensors: Optional[str] = "pt",
+                   device: Optional[str] = None) -> BatchEncoding:
         processor = AutoProcessor.from_pretrained(ASTEncoder.HF_name)
-        return processor(raw_audio, sampling_rate, return_tensors)
+        if device is not None:
+            return processor(raw_audio, sampling_rate, return_tensors).to(device)
+        else:
+            return processor(raw_audio, sampling_rate, return_tensors)
 
     def _encode(self, x: BatchEncoding) -> torch.Tensor:
         with torch.no_grad():

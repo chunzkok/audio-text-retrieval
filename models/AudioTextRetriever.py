@@ -4,6 +4,8 @@ import torch
 from .AudioEncoders import AudioEncoder, ASTEncoder
 from .TextEncoders import TextEncoder, RoBERTaEncoder
 from dataclasses import dataclass
+from pathlib import Path
+from safetensors import safe_open
 from torch import nn
 from transformers import BatchEncoding
 from transformers.utils import ModelOutput
@@ -104,7 +106,7 @@ class AudioTextRetriever(nn.Module):
         text_embed = layer_norm(self.TextAttention(text_embed, audio_embed_raw, audio_embed_raw)[0] + audio_embed_raw)
         text_embed = layer_norm(self.TextAttentionFF(text_embed) + text_embed)
 
-        embeddings = torch.stack((audio_embed, text_embed))
+        embeddings = torch.stack((audio_embed, text_embed), dim=-2)
 
         if labels is not None: # labels present, calculate loss
             tensor_labels = torch.Tensor(labels).type("torch.LongTensor").to(device)
@@ -114,3 +116,11 @@ class AudioTextRetriever(nn.Module):
 
         return (AudioTextOutput(embeddings=embeddings, loss=loss) if return_dict 
                 else (loss, embeddings)) # Trainer specifies to return loss as first element if a tuple is returned
+    
+    def load_weights(self, dir_path: Path | str) -> None:
+        state_dict = {}
+        with safe_open(Path(dir_path) / "model.safetensors", framework="pt", device=device) as f:
+            for key in f.keys():
+                state_dict[key] = f.get_tensor(key)
+        print(self.load_state_dict(state_dict))
+            

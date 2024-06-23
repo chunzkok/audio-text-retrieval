@@ -20,7 +20,8 @@ class TextEncoder(nn.Module, ABC):
     @abstractmethod
     def preprocess(self, 
                    sentence: Union[str, List[str], List[List[str]]], 
-                   return_tensors: Optional[str] = None) -> BatchEncoding:
+                   return_tensors: Optional[str] = None,
+                   device: Optional[str] = None) -> BatchEncoding:
         raise NotImplementedError
 
     @abstractmethod
@@ -45,9 +46,13 @@ class RoBERTaEncoder(TextEncoder):
 
     def preprocess(self, 
                    sentence: Union[str, List[str], List[List[str]]], 
-                   return_tensors: Optional[str] = "pt") -> BatchEncoding:
+                   return_tensors: Optional[str] = "pt",
+                   device: Optional[str] = None) -> BatchEncoding:
         tokenizer = AutoTokenizer.from_pretrained(RoBERTaEncoder.HF_name)
-        return tokenizer(sentence, return_tensors=return_tensors, padding=True)
+        if device is not None:
+            return tokenizer(sentence, return_tensors=return_tensors, padding=True).to(device)
+        else:
+            return tokenizer(sentence, return_tensors=return_tensors, padding=True)
 
     def _encode(self, x: BatchEncoding) -> torch.FloatTensor:
         with torch.no_grad():

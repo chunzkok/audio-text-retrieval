@@ -44,14 +44,17 @@ class AudioTextDataCollator:
         for i in range(N):
             audio = raw_audio[i]
 
-            if type(caption[i]) == list:
-                sentence = np.random.choice(caption[i])
-            else:
-                sentence = caption[i]
+            # hacky way to introduce multiple positive samples
+            NUM_POS_SAMPLES = 4
+            for _ in range(NUM_POS_SAMPLES):
+                if type(caption[i]) == list:
+                    sentence = np.random.choice(caption[i])
+                else:
+                    sentence = caption[i]
 
-            batch["raw_audio"].append(audio)
-            batch["sentence"].append(sentence)
-            batch["labels"].append(1)
+                batch["raw_audio"].append(audio)
+                batch["sentence"].append(sentence)
+                batch["labels"].append(1)
 
             # generate negative samples for the current audio
             neg_indices = self._random_index_excluding(N, i, self.k)
