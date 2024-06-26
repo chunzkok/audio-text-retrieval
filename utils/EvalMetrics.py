@@ -36,14 +36,14 @@ class CrossModalRetrieval(ABC):
 
         return (avg_precision.sum() / labels.sum()).item()
 
-class TextToAudioRetrieval(CrossModalRetrieval):
+class AudioToTextRetrieval(CrossModalRetrieval):
     @staticmethod
     def embeddings_to_logits(embeddings: np.ndarray) -> np.ndarray:
         audio_embed = embeddings[:, 0, :]
         text_embed = embeddings[:, 1, :]
         return (audio_embed @ text_embed.T)
 
-class AudioToTextRetrieval(CrossModalRetrieval):
+class TextToAudioRetrieval(CrossModalRetrieval):
     @staticmethod
     def embeddings_to_logits(embeddings: np.ndarray) -> np.ndarray:
         audio_embed = embeddings[:, 0, :]

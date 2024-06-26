@@ -27,7 +27,7 @@ class TextAudioRetrieval:
             print("Calculating relevance...")
             audio_embed = embeds[:, 0, :]
             text_embed = embeds[:, 1, :]
-            logits = torch.multiply(audio_embed, text_embed).sum(dim=1)
+            logits = torch.multiply(text_embed, audio_embed).sum(dim=1)
             _, top_k_indices = logits.topk(topk)
 
         return [audio_files[i] for i in top_k_indices]
