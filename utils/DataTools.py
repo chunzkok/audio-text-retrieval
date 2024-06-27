@@ -26,6 +26,66 @@ def concat_encodings(encodings: Iterable[BatchEncoding]) -> BatchEncoding:
                             + "This could be because the values are not of type torch.Tensor.")
     return BatchEncoding(data)
 
+def random_index_excluding(
+        upper_bound: int, 
+        exclude: int, 
+        size: int = 1
+    ) -> np.ndarray:
+    indices = np.random.randint(upper_bound - 1, size=size)
+    return indices + (indices >= exclude)
+
+def generate_samples(pos_samples: Dict[str, Any], num_pos: int = 1, num_neg = 0) -> Dict[str, Any]:
+    N = len(pos_samples["path"])
+    samples = {
+        "path": [],
+        "caption": [],
+        "labels": []
+    }
+    for i, (path, caption) in enumerate(zip(pos_samples["path"], pos_samples["caption"])):
+        # positive samples
+        samples["path"].extend([path] * num_pos)
+        if type(caption) == list:
+            samples["caption"].extend(np.random.choice(
+                caption, 
+                size=num_pos, 
+                replace=(num_pos > len(caption))
+            ))
+        else:
+            samples["caption"].extend([caption] * num_pos)
+        samples["labels"].extend([1] * num_pos)
+
+        # negative samples
+        if num_neg == 0: 
+            continue
+        neg_indices = random_index_excluding(upper_bound=N, exclude=i, size=num_neg)
+        for j in neg_indices:
+            # choose between fixing audio/caption for the negative sample
+            coin_flip = bool(np.random.randint(2))
+            if coin_flip:
+                # fix audio
+                samples["path"].append(path)
+                if type(caption) == list:
+                    samples["caption"].append(np.random.choice(pos_samples["caption"][j]))
+                else:
+                    samples["caption"].append(pos_samples["caption"][j])
+                samples["labels"].append(0)
+            else:
+                # fix caption
+                samples["path"].append(pos_samples["path"][j])
+                if type(caption) == list:
+                    samples["caption"].append(np.random.choice(caption))
+                else:
+                    samples["caption"].append(caption)
+                samples["labels"].append(0)
+
+    return samples
+
+def create_sample_generator(num_pos, num_neg) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
+    def sample_generator(batch: Dict[str, Any]) -> Dict[str, Any]:
+        return generate_samples(batch, num_pos, num_neg)
+    return sample_generator
+
+
 class AudioTextDataCollator:
     def __init__(
             self, 
@@ -62,14 +122,6 @@ class AudioTextDataCollator:
         )
         return batch
 
-    def _random_index_excluding(
-            self, 
-            upper_bound: int, 
-            exclude: int, 
-            size: int = 1
-        ) -> np.ndarray:
-        indices = np.random.randint(upper_bound - 1, size=size)
-        return indices + (indices >= exclude)
 
     def _process_if_needed(
         self,
