@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torchaudio
-from typing import Any, Callable, Dict, List, Union
+from typing import Any, Callable, Dict, Iterable, List, Union
 from transformers import BatchEncoding
 
 def path_to_audio(path: str | List[str], sampling_rate: int = 16_000) -> np.ndarray | List[np.ndarray]:
@@ -17,65 +17,49 @@ def _path_to_audio_single(path: str, target_rate: int) -> np.ndarray:
         raw_audio = torchaudio.transforms.Resample(sampling_rate, target_rate)(raw_audio)
     return raw_audio.squeeze().numpy()
 
+def concat_encodings(encodings: Iterable[BatchEncoding]) -> BatchEncoding:
+    data = {}
+    for key in next(iter(encodings)).keys():
+        data[key] = torch.concat([encoding[key] for encoding in encodings if type(encoding) == torch.Tensor], dim=0)
+        if len(data[key]) == 0:
+            raise Exception(f"utils.DataTools.concat_encodings found an empty BatchEncoding key {key}! "
+                            + "This could be because the values are not of type torch.Tensor.")
+    return BatchEncoding(data)
+
 class AudioTextDataCollator:
     def __init__(
             self, 
-            k: int,
             audio_processor: Callable[[Union[np.ndarray, List[np.ndarray], torch.Tensor], int], BatchEncoding],
             text_tokenizer: Callable[[Union[str, List[str]]], BatchEncoding],
             path_to_audio_converter: Callable[[Union[str, List[str]], int], Union[np.ndarray, List[np.ndarray], torch.Tensor]] 
                 = path_to_audio
         ):
         self.path_to_audio_converter = path_to_audio_converter # should output at the correct sampling rate too!
-        self.k = k # Half of the number of negative samples per audio file (i.e. # neg samples = 2k)
         self.audio_processor = audio_processor
         self.text_tokenizer = text_tokenizer
+        # avoid repeated computation
+        self.extracted_audios: Dict[str, BatchEncoding] = {}
+        self.tokenized_texts : Dict[str, BatchEncoding] = {}
 
     def __call__(self, inputs, sampling_rate: int = 16_000):
-        raw_audio = self.path_to_audio_converter([input["path"] for input in inputs], sampling_rate)
+        audio_paths = [input["path"] for input in inputs]
         caption = [input["caption"] for input in inputs]
         batch: Dict[str, Any] = {
             "raw_audio": [],
             "sentence": [],
-            "labels": []
+            "labels": [input["label"] for input in inputs]
         }
-        N = len(inputs)
 
-        for i in range(N):
-            audio = raw_audio[i]
-
-            # hacky way to introduce multiple positive samples
-            NUM_POS_SAMPLES = 4
-            for _ in range(NUM_POS_SAMPLES):
-                if type(caption[i]) == list:
-                    sentence = np.random.choice(caption[i])
-                else:
-                    sentence = caption[i]
-
-                batch["raw_audio"].append(audio)
-                batch["sentence"].append(sentence)
-                batch["labels"].append(1)
-
-            # generate negative samples for the current audio
-            neg_indices = self._random_index_excluding(N, i, self.k)
-            for j in neg_indices:
-                negative_caption = np.random.choice(caption[j]) if type(caption[j]) == list else caption[j]
-                batch["raw_audio"].append(audio)
-                batch["sentence"].append(negative_caption)
-                batch["labels"].append(0)
-
-            # generate negative samples for the current caption (or one of the current captions, if there are multiple)
-            neg_indices = self._random_index_excluding(N, i, self.k)
-            for j in neg_indices:
-                negative_audio = raw_audio[j]
-                current_caption = np.random.choice(caption[i]) if type(caption[i]) == list else caption[i]
-                batch["raw_audio"].append(negative_audio)
-                batch["sentence"].append(current_caption)
-                batch["labels"].append(0)
-
-        batch["raw_audio"] = self.audio_processor(batch["raw_audio"], sampling_rate)
-        batch["sentence"] = self.text_tokenizer(batch["sentence"])
-        batch["labels"] = torch.tensor(batch["labels"])
+        batch["raw_audio"] = self._process_if_needed(
+            audio_paths,
+            lambda paths: self.audio_processor(path_to_audio(paths), sampling_rate),
+            self.extracted_audios
+        )
+        batch["sentence"] = self._process_if_needed(
+            caption,
+            self.text_tokenizer,
+            self.tokenized_texts
+        )
         return batch
 
     def _random_index_excluding(
@@ -87,3 +71,24 @@ class AudioTextDataCollator:
         indices = np.random.randint(upper_bound - 1, size=size)
         return indices + (indices >= exclude)
 
+    def _process_if_needed(
+        self,
+        samples: Iterable[str],
+        processor: Callable[[List[str]], BatchEncoding], 
+        memo: Dict[str, BatchEncoding]
+    ) -> BatchEncoding:
+        unknown_samples = {sample for sample in samples if sample not in memo}
+        if len(unknown_samples) > 0:
+            processed = processor(list(unknown_samples))
+            for i, sample in enumerate(unknown_samples):
+                memo[sample] = BatchEncoding({
+                    key : val[i].unsqueeze(dim=0) 
+                    for key, val in processed.items() 
+                    if type(val) == torch.Tensor
+                })
+        # for checking that the memoization works
+        N = len(list(samples))
+        if len(unknown_samples) < N:
+            print(f"Saved {N - len(unknown_samples)} calculations!")
+        #####################################
+        return concat_encodings([memo[name] for name in samples])
