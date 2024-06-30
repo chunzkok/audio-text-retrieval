@@ -1,6 +1,6 @@
 import torch
+import torch.nn.functional as F
 
-from torch.nn import functional
 from typing import Optional
 
 
@@ -10,14 +10,15 @@ def contrastiveCE(
         labels: torch.Tensor, 
         temperature: Optional[float] = 0.2
     ):
-
-    # wait... aren't they just transposes of each other
     logits_audio2text = audio_embed @ text_embed.T / temperature
-    logits_text2audio = text_embed @ audio_embed.T / temperature
+    probs_audio2text = F.softmax(logits_audio2text, dim=1)
+
+    logits_text2audio = logits_audio2text.T
+    probs_text2audio = F.softmax(logits_text2audio, dim=1)
 
     return 1/2 * (
-        functional.cross_entropy(logits_audio2text, labels)
-        + functional.cross_entropy(logits_text2audio, labels)
+        F.binary_cross_entropy(probs_audio2text.diagonal(), labels)
+        + F.binary_cross_entropy(probs_text2audio.diagonal(), labels)
     )
 
 def create_contrastive_loss(temperature: float = 0.2):

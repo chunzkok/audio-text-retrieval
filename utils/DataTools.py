@@ -162,7 +162,7 @@ class AudioTextDataCollator:
         batch: Dict[str, Any] = {
             "raw_audio": [],
             "sentence": [],
-            "labels": torch.tensor([input["label"] for input in inputs])
+            "labels": torch.tensor([input["label"] for input in inputs]).type("torch.FloatTensor")
         }
 
         batch["raw_audio"] = self.audio_processor(path_to_audio(audio_paths), sampling_rate)
