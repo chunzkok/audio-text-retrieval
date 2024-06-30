@@ -18,9 +18,9 @@ class Parser(ABC):
     This class should implement methods to export the parsed data in either pd.DataFrame or
     datasets.Dataset form.
     The exported data should contain 2-3 columns: 
-        1. path to the audio file (str), and
-        2. caption(s) (str | List[str])
-        3. split (Optional[SplitType])
+        1. path: path to the audio file (str),
+        2. caption: caption(s) (str | List[str]),
+        3. split: which split this row belongs to (Optional[SplitType])
             - only present when no arguments are passed into to_hf or to_pd
 
     Methods
@@ -47,7 +47,7 @@ class Parser(ABC):
 class ClothoParser(Parser):
     """
     A parser that parses the Clotho v2.1 dataset into different formats (pd.DataFrame or 
-    datasets.arrow_dataset.Dataset).
+    datasets.Dataset).
 
     Attributes
     ----------
@@ -66,7 +66,7 @@ class ClothoParser(Parser):
     Methods
     -------
     to_hf():
-        Returns a datasets.Dataset containing three columns: path, caption and split.
+        Returns a datasets.Dataset containing two columns: path and caption.
 
     to_pd():
         Returns a pd.DataFrame containing three columns: path, caption and split.
@@ -108,6 +108,82 @@ class ClothoParser(Parser):
 
         if split != None:
             df = df[df["split"] == split.name] # filter DEV rows
+            df = df.iloc[:, :2] # remove `split`` col
+
+        return df.reset_index(drop=True)
+
+class AudioCapsParser(Parser):
+    """
+    A parser that parses the AudioCaps dataset into different formats (pd.DataFrame or 
+    datasets.Dataset). 
+    Note that the audio files must be downloaded before using this. Consider using the 
+    one located at https://github.com/prompteus/audio-captioning/blob/main/audiocap/download_audiocaps.py
+
+    Attributes
+    ----------
+    audiocaps_path: str | pathlib.Path
+        Path to the AudioCaps dataset.
+        This path should point to a directory organised as such:
+        clotho_path
+        ├── test/
+        ├── train/
+        ├── val/
+        ├── test.csv
+        ├── train.csv
+        └── val.csv
+        where the subdirectories contain the .wav files in the format "{audiocap_id}_{youtube_id}.wav".
+    Methods
+    -------
+    to_hf():
+        Returns a datasets.Dataset containing two columns: path and caption.
+
+    to_pd():
+        Returns a pd.DataFrame containing three columns: path, caption and split.
+    """
+
+    def __init__(self, audiocaps_path: str | Path):
+        self.root_path = Path(audiocaps_path)
+        self.file_paths = []
+        self.captions = []
+        self.split = []
+        split_mapping = {
+            "train": "DEV",
+            "val": "VAL",
+            "test": "TEST"
+        }
+
+        for split_name, split_type in split_mapping.items():
+            caps_path = self.root_path.joinpath(f"{split_name}.csv")
+            audio_path = self.root_path.joinpath(split_name)
+            df = pd.read_csv(caps_path)
+            df["filename"] = df["audiocap_id"].astype("str") + '_' + df["youtube_id"] + ".wav"
+
+            # filter rows where file was not downloaded successfully
+            file_exists = df["filename"].apply(lambda x: audio_path.joinpath(x).is_file())
+            df = df[file_exists]
+            
+            self.file_paths.extend([
+                str(audio_path.joinpath(path)) 
+                for path in df["filename"]
+                if audio_path.joinpath(path).is_file()
+            ])
+            self.captions.extend(df["caption"])
+
+            self.split.extend([split_type] * len(df))
+            assert len(self.file_paths) == len(self.captions) == len(self.split)
+
+    def to_hf(self, split: Optional[SplitType] = None) -> Dataset:
+        return Dataset.from_pandas(self.to_pd(split))
+
+    def to_pd(self, split: Optional[SplitType] = None) -> pd.DataFrame:
+        df = pd.DataFrame({
+                "path": self.file_paths,
+                "caption": self.captions,
+                "split": self.split
+            })
+
+        if split != None:
+            df = df[df["split"] == split.name] # filter rows for split type
             df = df.iloc[:, :2] # remove `split`` col
 
         return df.reset_index(drop=True)
