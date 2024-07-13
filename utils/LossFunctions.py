@@ -21,6 +21,23 @@ def contrastiveCE(
         + F.binary_cross_entropy(probs_text2audio.diagonal(), labels)
     )
 
-def create_contrastive_loss(temperature: float = 0.2):
-    print(f"Created contrastive loss function with temperature {temperature}")
-    return lambda audio, text, labels: contrastiveCE(audio, text, labels, temperature)
+def contrastiveCrossAtt(
+        logits: torch.Tensor, 
+        labels: torch.Tensor, 
+        temperature: Optional[float] = 0.2
+    ):
+    logits /= temperature
+    probs_audio2text = F.softmax(logits, dim=1)
+    probs_text2audio = F.softmax(logits, dim=0)
+
+    return 1/2 * (
+        F.binary_cross_entropy(probs_audio2text.diagonal(), labels)
+        + F.binary_cross_entropy(probs_text2audio.diagonal(), labels)
+    )
+
+def create_contrastive_loss(temperature: float = 0.2, cross_attn: bool = False):
+    print(f"Created contrastive loss function for {'cross-' if cross_attn else 'self-'}attention model with temperature {temperature}.")
+    if cross_attn:
+        return lambda logits, labels: contrastiveCrossAtt(logits, labels, temperature)
+    else:
+        return lambda audio, text, labels: contrastiveCE(audio, text, labels, temperature)

@@ -62,8 +62,7 @@ class ASTEncoder(AudioEncoder):
             return processor(raw_audio, sampling_rate, return_tensors)
 
     def _encode(self, x: BatchEncoding) -> torch.Tensor:
-        with torch.no_grad():
-            output : modeling_outputs.BaseModelOutputWithPooling = self.encoder(**x)
+        output : modeling_outputs.BaseModelOutputWithPooling = self.encoder(**x)
 
         embed = output.last_hidden_state
         assert isinstance(embed, torch.Tensor)

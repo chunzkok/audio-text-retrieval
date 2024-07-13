@@ -55,8 +55,7 @@ class RoBERTaEncoder(TextEncoder):
             return tokenizer(sentence, return_tensors=return_tensors, padding=True)
 
     def _encode(self, x: BatchEncoding) -> torch.FloatTensor:
-        with torch.no_grad():
-            output : modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions = self.encoder(**x)
+        output : modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions = self.encoder(**x)
 
         # Uses the sentence embedding for the [CLS] token
         embed = output.pooler_output
