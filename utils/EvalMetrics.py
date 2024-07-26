@@ -7,20 +7,21 @@ from typing import Callable, List, Optional, Tuple
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 class CrossModalRetrieval(ABC):
-    def __init__(self, embeddings: np.ndarray, labels: np.ndarray, 
+    def __init__(self, labels: np.ndarray, audio_embed: np.ndarray, text_embed: np.ndarray,  
                  do_cross_attention: Optional[Callable[
                      [torch.Tensor, torch.Tensor, bool, str], 
                      Tuple[Optional[torch.Tensor], torch.Tensor]]] = None
                  ):
-        self.embeddings = embeddings
+        self.audio_embed = audio_embed
+        self.text_embed = text_embed
         self.labels = labels
         self.do_cross_attention = do_cross_attention
-        self._logits = None
         self._ranking = None
+        self._logits = None
 
     @abstractmethod
     def _get_logits(self) -> np.ndarray:
-        raise NotImplementedError()
+        return NotImplementedError()
 
     @property
     def logits(self) -> np.ndarray:
@@ -61,23 +62,27 @@ class CrossModalRetrieval(ABC):
 
 
 class AudioToTextRetrieval(CrossModalRetrieval):
-    def __init__(self, embeddings: np.ndarray, labels: np.ndarray, do_cross_attention = None):
-        super().__init__(embeddings, labels, do_cross_attention)
+    def __init__(self, labels: np.ndarray, audio_embed: np.ndarray, text_embed: np.ndarray,  
+                 do_cross_attention: Optional[Callable[
+                     [torch.Tensor, torch.Tensor, bool, str], 
+                     Tuple[Optional[torch.Tensor], torch.Tensor]]] = None
+                 ):
+        super().__init__(labels, audio_embed, text_embed, do_cross_attention)
 
     def _get_logits(self) -> np.ndarray:
         with torch.no_grad():
-            audio_embed = self.embeddings[:, 0, :]
-            text_embed = self.embeddings[:, 1, :]
-            return (audio_embed @ text_embed.T) if self.do_cross_attention is None \
-                else self.do_cross_attention(torch.tensor(audio_embed), torch.tensor(text_embed), False, "cuda")[1].cpu().numpy()
+            return (self.audio_embed @ self.text_embed.T) if self.do_cross_attention is None \
+                else self.do_cross_attention(torch.tensor(self.audio_embed), torch.tensor(self.text_embed), False, "cuda")[1].cpu().numpy()
 
 class TextToAudioRetrieval(CrossModalRetrieval):
-    def __init__(self, embeddings: np.ndarray, labels: np.ndarray, do_cross_attention = None):
-        super().__init__(embeddings, labels, do_cross_attention)
+    def __init__(self, labels: np.ndarray, audio_embed: np.ndarray, text_embed: np.ndarray,  
+                 do_cross_attention: Optional[Callable[
+                     [torch.Tensor, torch.Tensor, bool, str], 
+                     Tuple[Optional[torch.Tensor], torch.Tensor]]] = None
+                 ):
+        super().__init__(labels, audio_embed, text_embed, do_cross_attention)
 
     def _get_logits(self) -> np.ndarray:
         with torch.no_grad():
-            audio_embed = self.embeddings[:, 0, :]
-            text_embed = self.embeddings[:, 1, :]
-            return (text_embed @ audio_embed.T) if self.do_cross_attention is None \
-                else self.do_cross_attention(torch.tensor(audio_embed), torch.tensor(text_embed), False, "cuda")[1].cpu().numpy().T
+            return (self.text_embed @ self.audio_embed.T) if self.do_cross_attention is None \
+                else self.do_cross_attention(torch.tensor(self.audio_embed), torch.tensor(self.text_embed), False, "cuda")[1].cpu().numpy().T

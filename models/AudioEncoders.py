@@ -68,3 +68,18 @@ class ASTEncoder(AudioEncoder):
         assert isinstance(embed, torch.Tensor)
         embed = embed.mean(dim=1) # average over time dimension
         return embed 
+
+class TemporalASTEncoder(ASTEncoder):
+    def __init__(self, hidden_dim: int = 2048, out_dim: int = 1024, load_from: str = ASTEncoder.HF_name, 
+                 pooling_kernel_size: int = 8, pooling_stride: int = 6, pooling_padding: int = 0):
+        super().__init__(hidden_dim, out_dim, load_from)
+        self.mean_pool = None if pooling_kernel_size == 0 else \
+            nn.AvgPool1d(pooling_kernel_size, pooling_stride, pooling_padding)
+
+    def _encode(self, x: BatchEncoding) -> torch.Tensor:
+        output : modeling_outputs.BaseModelOutputWithPooling = self.encoder(**x)
+        if self.mean_pool is not None:
+            embeds = output.last_hidden_state
+            return self.mean_pool.forward(embeds.transpose(-1, -2)).transpose(-1, -2)
+        else:
+            return output.last_hidden_state
