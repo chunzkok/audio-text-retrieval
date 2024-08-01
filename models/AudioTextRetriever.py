@@ -276,7 +276,7 @@ class AudioTextRetrieverWithMLP(AudioTextRetrieverSelfAtt):
         audio_embed = self.AudioMLP(audio_embed)
         text_embed = self.TextMLP(text_embed)
 
-        return text_embed @ audio_embed.T
+        return (text_embed @ audio_embed.T).squeeze()
 
 
 class AudioTextRetrieverCrossAtt(AudioTextRetriever):

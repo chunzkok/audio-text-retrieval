@@ -1,48 +1,82 @@
+import datasets
+import gc
 import numpy as np
 import torch
 
 from argparse import ArgumentParser, ArgumentTypeError
+from functools import cache
 from models.AudioTextRetriever import AudioTextRetriever
 from utils.DataTools import path_to_audio
 from utils.LossFunctions import contrastiveCE
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 class TextAudioRetrieval:
-    @classmethod
-    def predict(cls, model: Path, data: Path, query: str, topk: int, batch_size: int = 256) -> List[str]:
-        retriever = AudioTextRetriever(contrastiveCE).to(device)
+    def __init__(self, retriever: AudioTextRetriever, weights_dir: Path, data_dir: Path, cache_dir: Path, batch_size: int = 256):
         print("Loading model weights...")
-        retriever.load_weights(model)
-        audio_files = [str(path) for path in data.glob("*.wav")]
-        print(f"Reading {len(audio_files)} audio files...")
-        raw_audios = path_to_audio(audio_files)
-        with torch.no_grad():
-            print("Processing inputs...")
-            split_embeds = [cls._extract_embeds(retriever, raw_audios[i:i+batch_size], query) 
-                            for i in range(0, len(raw_audios), batch_size)]
-            embeds = torch.cat(split_embeds, dim=0)
-            print("Calculating relevance...")
-            audio_embed = embeds[:, 0, :]
-            text_embed = embeds[:, 1, :]
-            logits = torch.multiply(text_embed, audio_embed).sum(dim=1)
-            _, top_k_indices = logits.topk(topk)
+        retriever.load_weights(weights_dir)
 
-        return [audio_files[i] for i in top_k_indices]
+        self.retriever = retriever
+        self.data_dir = data_dir
+        self.cache_dir = cache_dir
+        self.batch_size = batch_size
+        self._audio_files = None
+        self._raw_audios = None
+        self.processed_audios = None
 
-    @staticmethod
-    def _extract_embeds(retriever: AudioTextRetriever, raw_audios: np.ndarray | List[np.ndarray], query: str) -> torch.Tensor:
-        with torch.no_grad():
-            audio_inputs = retriever.AudioEncoder.preprocess(raw_audios, sampling_rate=16_000, device=device)
-            text_inputs = retriever.TextEncoder.preprocess([query] * len(raw_audios), device=device)
+    @property
+    def audio_files(self) -> List[str]:
+        if self._audio_files is None:
+            self._audio_files = [str(path) for path in self.data_dir.glob("*.wav")]
+            print(f"Found {len(self._audio_files)} audio files!")
+        return self._audio_files
 
-            # With return_dict=True, we know for sure we are getting a dictionary (more precisely: an AudioTextOutput)
-            return retriever.forward(audio_inputs, text_inputs, return_dict=True).embeddings # type: ignore
+    @property
+    def raw_audios(self) -> datasets.Dataset | datasets.DatasetDict:
+        if self._raw_audios is None:
+            paths = datasets.Dataset.from_dict({"path": self.audio_files})
+            save_dir = self.cache_dir / paths._fingerprint
+
+            print(f"Reading {len(paths)} audio files...")
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            if save_dir.is_dir():
+                self._raw_audios = datasets.load_from_disk(str(save_dir))
+            else:
+                self._raw_audios = paths.map(
+                    lambda row: {"audio": path_to_audio(row["path"])}, 
+                )
+                self._raw_audios.save_to_disk(str(save_dir))
+            print("Done reading!")
+        return self._raw_audios
 
 
+    def swap_retriever(self, new_retriever: AudioTextRetriever, weights_dir: Optional[Path]):
+        del self.retriever # free all references to old retriever
+        gc.collect()
+        torch.cuda.empty_cache()
+        self.predict.cache_clear()
 
+        if weights_dir is not None:
+            new_retriever.load_weights(weights_dir)
+        self.retriever = new_retriever
+
+    def swap_data_dir(self, new_data_dir: Path):
+        self.data_dir = new_data_dir
+        self._audio_files = None
+        self._raw_audios = None
+        self.processed_audios = None
+
+    @cache
+    def predict(self, query: str, topk: int) -> List[Tuple[str, float]]:
+        print("Querying audio files...")
+        logits = self.retriever.query_audio(query, self.raw_audios["audio"], sampling_rate=16000, 
+                                            audio_set_name=self.raw_audios._fingerprint, batch_size=self.batch_size).cpu()
+        probs = logits.softmax(dim=0)
+        top_k_probs, top_k_indices = probs.topk(topk)
+
+        return [(self.audio_files[i], r.item()) for i, r in zip(top_k_indices, top_k_probs)]
 
 
 if __name__=="__main__":
@@ -63,16 +97,20 @@ if __name__=="__main__":
                         help="The number of results to return, ordered in descending relevance.")
     parser.add_argument("--batchsize", required=False, default=256, type=int,
                         help="The batch size to be used when passing inputs to the model for prediction.")
+    parser.add_argument("--cachedir", required=False, default="/tmp/kokcz/.cache/huggingface/datasets/predict", type=Path,
+                        help="The directory used to cache dataset objects.")
 
     args = parser.parse_args()
     ## do some additional data validation
     if not args.data.exists():
         raise ArgumentTypeError("The input to --data must be a valid path!")
 
+    torch.set_grad_enabled(False)
     if args.intype == "text":
         if not (args.data.is_dir() and list(args.data.glob("*.wav"))): 
             raise ArgumentTypeError("The input to --data must be a directory containing at least 1 .wav file!")
-        print(TextAudioRetrieval.predict(args.model, args.data, args.query, args.topk, args.batchsize))
+        retriever = AudioTextRetriever(contrastiveCE).to(device)
+        print(TextAudioRetrieval(retriever, args.model, args.data, args.cachedir, args.batchsize).predict(args.query, args.topk))
     else:
         if not (args.data.is_file() and args.data.suffix == ".csv"):
             raise ArgumentTypeError("The input to --data must be a .csv file with one caption per line!")
